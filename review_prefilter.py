@@ -122,11 +122,14 @@ def parse_glossary(path: str) -> list[dict]:
 
 
 def name_in_text(name: str, text: str) -> bool:
-    """Case-insensitive word-boundary match (multi-word names supported)."""
+    """Case-insensitive word-boundary match (multi-word names supported).
+    Allows German possessive/inflection suffixes (Lärchs, Loges) while
+    the trailing boundary still rejects longer words (Lärchstein)."""
     if not name or not text:
         return False
     esc = re.escape(name)
-    return re.search(rf"(?<!\w){esc}(?!\w)", text, re.IGNORECASE) is not None
+    return re.search(rf"(?<!\w){esc}(?:s|es)?(?!\w)", text,
+                     re.IGNORECASE) is not None
 
 
 # --------------------------------------------------------------------------
