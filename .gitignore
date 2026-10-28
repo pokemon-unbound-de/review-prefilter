@@ -5,3 +5,5 @@ report/
 !examples/*.json
 .env
 *.token
+*.sqlite3
+*.sqlite3-*

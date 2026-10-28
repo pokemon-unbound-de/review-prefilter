@@ -40,6 +40,9 @@ uploaded anywhere (Layer 1). Layer 2 is explicit opt-in.
 from __future__ import annotations
 
 import argparse
+import hashlib
+from pathlib import Path
+from incremental_cache import review_cards
 import difflib
 import json
 import os
@@ -371,13 +374,14 @@ def main() -> int:
                    help="run Layer 2 LLM review on flagged cards")
     p.add_argument("--llm-scope", choices=["flagged", "all"],
                    default="flagged")
+    p.add_argument("--cache", default=None, help="optional private SQLite cache for Layer 1")
     args = p.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
 
     with open(args.cards, encoding="utf-8") as fh:
         cdata = json.load(fh)
-    cards = cdata.get("cards", cdata if isinstance(cdata, list) else [])
+    cards = cdata if isinstance(cdata, list) else cdata.get("cards", [])
     print(f"→ {len(cards)} Karten geladen", file=sys.stderr)
 
     glossary = parse_glossary(args.glossary) if args.glossary else []
@@ -395,8 +399,14 @@ def main() -> int:
         k: sorted(v) for k, v in groups.items() if len(v) > 1}
 
     print("→ Layer 1: deterministische Checks …", file=sys.stderr)
-    results = [check_card(c, glossary, corpus, consistency_groups,
-                          run_fuzzy=not args.no_fuzzy) for c in cards]
+    rules_version = hashlib.sha256(
+        Path(__file__).read_bytes() + Path(__file__).with_name("incremental_cache.py").read_bytes()).hexdigest()
+    results, cache_stats = review_cards(
+        cards, glossary, corpus, consistency_groups, not args.no_fuzzy,
+        check_card, cache_path=args.cache, rules_version=rules_version)
+    if args.cache:
+        print(f"→ Layer-1-Cache: {cache_stats['hits']} Treffer, "
+              f"{cache_stats['misses']} neu geprüft", file=sys.stderr)
 
     # -- Layer 2
     if args.llm:
@@ -438,6 +448,7 @@ def main() -> int:
         "generated_at": __import__("datetime").datetime.now().isoformat(),
         "summary": {
             "cards": len(cards),
+            "layer1_cache": cache_stats,
             "verdicts": dict(verdicts),
             "flags_by_check": dict(check_counts),
             "workload_hours_before": round(before_h, 1),

@@ -108,3 +108,24 @@ konfigurierten Endpunkt. Ohne `--llm` bleibt alles lokal.
 *Teil des Pokémon Unbound DE Projekts. Unoffizielles Fan-Projekt, nicht
 mit den Rechteinhabern verbunden. Keine ROMs, Inhalte oder privaten
 Daten in diesem Repository.*
+
+## Inkrementelle Layer-1-Prüfung
+
+Mit `--cache /privater/pfad/review.sqlite3` können deterministische
+Kartenergebnisse lokal wiederverwendet werden. Ohne diese Option bleibt der
+Cache aus. Der Schlüssel berücksichtigt **die gesamte Karte** (auch DE,
+Kontext und Layout-Metadaten), Glossar, Korpus, Konsistenzgruppen, Fuzzy-Option
+und den Inhalt beider Python-Prüfdateien. `source_sha256` allein reicht nicht.
+Änderungen an gemeinsamen Daten invalidieren konservativ alle Einträge.
+
+Der Cache enthält Karteninhalte und Prüfbefunde: ausschließlich lokal/privat
+aufbewahren. SQLite-Dateien sind git-ignoriert. Das bestehende Reportformat
+bleibt erhalten; `summary.layer1_cache` nennt Treffer und neue Prüfungen.
+Beschädigte Eintragspayloads werden neu berechnet; ein beschädigter oder nicht
+zugänglicher Datenbankcontainer führt zum Fehler statt zu einem Erfolg.
+
+Der Cache speichert **keine LLM-Antworten**. `--llm` behält sein bisheriges
+Verhalten und verursacht bei jedem aktivierten Lauf erneut externe Aufrufe.
+Der Cache ersetzt weder menschliches Review noch ROM-/Emulatorprüfungen.
+
+Prüfen: `python3 -m unittest discover -s tests -v`.
