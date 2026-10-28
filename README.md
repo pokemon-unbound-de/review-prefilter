@@ -129,3 +129,13 @@ Verhalten und verursacht bei jedem aktivierten Lauf erneut externe Aufrufe.
 Der Cache ersetzt weder menschliches Review noch ROM-/Emulatorprüfungen.
 
 Prüfen: `python3 -m unittest discover -s tests -v`.
+
+Betriebshinweise: Der Cache hat noch keine automatische Größenbegrenzung oder
+Bereinigung. Alte Einträge bleiben erhalten, bis die lokale Datei bei
+angehaltener Verarbeitung entfernt wird; der nächste Lauf prüft dann neu.
+Veränderte Queue-Zusammensetzung kann Konsistenzgruppen ändern und dadurch
+alle Cacheeinträge invalidieren. Nichtendliche Zahlen (NaN/Infinity) sind
+für Cache-Schlüssel ungültig. Solche Eingaben oder nicht zugängliche
+Cachedateien brechen die CLI mit Exitcode 1 und kurzer Fehlermeldung ab.
+Vorhandene Reports älterer Läufe werden dabei nicht gelöscht; der aufrufende
+Prozess muss den Exitcode prüfen und einen frischen Ausgabeordner verwenden.

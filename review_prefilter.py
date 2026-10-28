@@ -48,6 +48,7 @@ import json
 import os
 import re
 import statistics
+import sqlite3
 import sys
 import urllib.error
 import urllib.request
@@ -401,9 +402,15 @@ def main() -> int:
     print("→ Layer 1: deterministische Checks …", file=sys.stderr)
     rules_version = hashlib.sha256(
         Path(__file__).read_bytes() + Path(__file__).with_name("incremental_cache.py").read_bytes()).hexdigest()
-    results, cache_stats = review_cards(
-        cards, glossary, corpus, consistency_groups, not args.no_fuzzy,
-        check_card, cache_path=args.cache, rules_version=rules_version)
+    try:
+        results, cache_stats = review_cards(
+            cards, glossary, corpus, consistency_groups, not args.no_fuzzy,
+            check_card, cache_path=args.cache, rules_version=rules_version)
+    except (ValueError, sqlite3.Error, OSError) as error:
+        print(f"Layer-1-Prüfung abgebrochen ({type(error).__name__}): "
+              "Eingabedaten und Cache-Zugriff prüfen; kein Ergebnis erzeugt.",
+              file=sys.stderr)
+        return 1
     if args.cache:
         print(f"→ Layer-1-Cache: {cache_stats['hits']} Treffer, "
               f"{cache_stats['misses']} neu geprüft", file=sys.stderr)

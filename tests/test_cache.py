@@ -88,3 +88,21 @@ class CacheCliTest(unittest.TestCase):
                 self.assertEqual(out['summary']['layer1_cache']['hits'],hits)
                 results.append(out['results'])
             self.assertEqual(*results)
+
+    def test_cli_invalid_cache_inputs_have_no_traceback(self):
+        import subprocess
+        import sys
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            cards = tmp/'cards.json'
+            for value, cache in [(float('nan'), tmp/'cache.sqlite3'),
+                                 (1, tmp/'missing'/'cache.sqlite3')]:
+                cards.write_text(json.dumps([{'id':'T','en':'Hello','de':'Hallo','limit_px_per_line':value}]))
+                out = tmp/('out-nan' if value != value else 'out-path')
+                run = subprocess.run([sys.executable,str(root/'review_prefilter.py'),
+                    '--cards',str(cards),'--no-fuzzy','--cache',str(cache),
+                    '--out-dir',str(out)],capture_output=True,text=True)
+                self.assertEqual(run.returncode,1)
+                self.assertNotIn('Traceback',run.stderr)
+                self.assertFalse((out/'prefilter_results.json').exists())
