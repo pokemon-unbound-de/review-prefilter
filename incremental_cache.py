@@ -24,7 +24,8 @@ def review_cards(cards, glossary, corpus, groups, run_fuzzy, checker,
             key = fingerprint([environment, card])
             row = connection.execute('SELECT payload,digest FROM results WHERE key=?', (key,)).fetchone()
             result = None
-            if row and hashlib.sha256(row[0].encode()).hexdigest() == row[1]:
+            if (row and isinstance(row[0], str) and isinstance(row[1], str)
+                    and hashlib.sha256(row[0].encode()).hexdigest() == row[1]):
                 try:
                     candidate = json.loads(row[0])
                     if isinstance(candidate, dict) and candidate.get('id') == card.get('id') and candidate.get('verdict') in ('pass', 'review', 'fix') and isinstance(candidate.get('flags'), list):

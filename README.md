@@ -90,8 +90,9 @@ konfigurierten Endpunkt. Ohne `--llm` bleibt alles lokal.
 
 ## Batch-Fähigkeit (v0.2+)
 
-- Cache-Plan: `source_sha256` als Cache-Key → neue Karten (z. B. der
-  Rest des Korpus) laufen inkrementell durch, bereits geprüfte nicht erneut
+- Implementiert: optionaler `--cache` fuer deterministische Layer-1-Ergebnisse.
+  Der Schluessel beruecksichtigt die gesamte Karte und alle Pruefabhaengigkeiten;
+  `source_sha256` allein genuegt nicht (Details unten).
 - Web-App-Integration: `prefilter_results.json` als Input für die
   Dialogwerkstatt (Karten nach Risiko sortieren, AI-Vorschläge anzeigen)
 
@@ -121,8 +122,12 @@ und den Inhalt beider Python-Prüfdateien. `source_sha256` allein reicht nicht.
 Der Cache enthält Karteninhalte und Prüfbefunde: ausschließlich lokal/privat
 aufbewahren. SQLite-Dateien sind git-ignoriert. Das bestehende Reportformat
 bleibt erhalten; `summary.layer1_cache` nennt Treffer und neue Prüfungen.
-Beschädigte Eintragspayloads werden neu berechnet; ein beschädigter oder nicht
-zugänglicher Datenbankcontainer führt zum Fehler statt zu einem Erfolg.
+Beschaedigte Eintragspayloads werden neu berechnet. Auch nicht-textuelle
+`payload`-/`digest`-Felder (z.B. SQLite-BLOBs) sind Cache-Misses statt Python-
+Abstuerzen; nur der betroffene Eintrag wird neu geschrieben. Bei gleicher
+Pruefversion bleiben andere gueltige Eintraege Treffer. Ein beschaedigter oder
+nicht zugaenglicher Datenbankcontainer fuehrt weiter zum Fehler statt zu einem
+Erfolg. Vorher/Nachher und Grenzen: [CACHE_RECOVERY.md](CACHE_RECOVERY.md).
 
 Der Cache speichert **keine LLM-Antworten**. `--llm` behält sein bisheriges
 Verhalten und verursacht bei jedem aktivierten Lauf erneut externe Aufrufe.

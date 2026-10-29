@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import sqlite3
 import tempfile
@@ -69,6 +70,52 @@ class CacheTest(unittest.TestCase):
         _,stats = self.run_cache(groups={'hello friend':['hallo','guten tag']})
         self.assertEqual(stats['misses'],2)
 
+    def corrupt_a(self, column, value):
+        with sqlite3.connect(self.db) as db:
+            rows = db.execute('SELECT key,payload FROM results').fetchall()
+            key = next(key for key, payload in rows if json.loads(payload)['id'] == 'A')
+            if column == 'payload':
+                db.execute('UPDATE results SET payload=? WHERE key=?', (value,key))
+            else:
+                db.execute('UPDATE results SET digest=? WHERE key=?', (value,key))
+
+    def assert_one_entry_repaired(self, expected):
+        self.checker.reset_mock()
+        result, stats = self.run_cache()
+        self.assertEqual(result, expected)
+        self.assertEqual(stats, {'enabled':True,'hits':1,'misses':1})
+        self.assertEqual(self.checker.call_count,1)
+        with sqlite3.connect(self.db) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM results').fetchone()[0],2)
+            self.assertEqual(db.execute('SELECT DISTINCT typeof(payload),typeof(digest) FROM results').fetchall(),[('text','text')])
+        _, warm = self.run_cache()
+        self.assertEqual(warm['hits'],2)
+
+    def test_blob_payload_is_repaired_without_flushing_other_card(self):
+        expected, _ = self.run_cache()
+        for value in (b'broken', b'\xff', json.dumps(expected[0]).encode('utf-8')):
+            with self.subTest(value_type='BLOB', size=len(value)):
+                self.corrupt_a('payload', sqlite3.Binary(value))
+                self.assert_one_entry_repaired(expected)
+
+    def test_blob_digest_is_a_miss_and_repaired(self):
+        expected, _ = self.run_cache()
+        self.corrupt_a('digest', sqlite3.Binary(b'0'*64))
+        self.assert_one_entry_repaired(expected)
+
+    def test_hash_matching_invalid_json_or_result_shape_is_repaired(self):
+        expected, _ = self.run_cache()
+        for payload in ('not json', '[]', json.dumps({'id':'B','verdict':'pass','flags':[]}),
+                        json.dumps({'id':'A','verdict':'pass','flags':None})):
+            with self.subTest(payload=payload):
+                with sqlite3.connect(self.db) as db:
+                    rows=db.execute('SELECT key,payload FROM results').fetchall()
+                    key=next(key for key,value in rows if json.loads(value)['id']=='A')
+                    db.execute('UPDATE results SET payload=?,digest=? WHERE key=?',
+                               (payload,hashlib.sha256(payload.encode()).hexdigest(),key))
+                self.assert_one_entry_repaired(expected)
+
+
 class CacheCliTest(unittest.TestCase):
     def test_cli_cold_and_warm(self):
         import subprocess
@@ -88,6 +135,32 @@ class CacheCliTest(unittest.TestCase):
                 self.assertEqual(out['summary']['layer1_cache']['hits'],hits)
                 results.append(out['results'])
             self.assertEqual(*results)
+
+    def test_cli_recovers_blob_payload_and_retains_warm_neighbor(self):
+        import subprocess
+        import sys
+        root=Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            tmp=Path(directory)
+            cards=tmp/'cards.json'
+            cards.write_text(json.dumps([{'id':'A','en':'Hello','de':'Hallo'},
+                                         {'id':'B','en':'Save','de':'Speichern'}]))
+            db_path=tmp/'cache.sqlite3';out=tmp/'output'
+            cmd=[sys.executable,str(root/'review_prefilter.py'),'--cards',str(cards),
+                 '--no-fuzzy','--cache',str(db_path),'--out-dir',str(out)]
+            first=subprocess.run(cmd,capture_output=True,text=True)
+            self.assertEqual(first.returncode,0,first.stderr)
+            expected=json.loads((out/'prefilter_results.json').read_text())['results']
+            with sqlite3.connect(db_path) as db:
+                rows=db.execute('SELECT key,payload FROM results').fetchall()
+                key=next(key for key,value in rows if json.loads(value)['id']=='A')
+                db.execute('UPDATE results SET payload=? WHERE key=?',(sqlite3.Binary(b'broken'),key))
+            repaired=subprocess.run(cmd,capture_output=True,text=True)
+            self.assertEqual(repaired.returncode,0,repaired.stderr)
+            self.assertNotIn('Traceback',repaired.stderr)
+            report=json.loads((out/'prefilter_results.json').read_text())
+            self.assertEqual(report['results'],expected)
+            self.assertEqual(report['summary']['layer1_cache'],{'enabled':True,'hits':1,'misses':1})
 
     def test_cli_invalid_cache_inputs_have_no_traceback(self):
         import subprocess
