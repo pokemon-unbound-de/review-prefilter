@@ -21,6 +21,7 @@ Layer 3  MENSCH           → bestätigt/verbessert in der Dialogwerkstatt
 |---|---|---|
 | `textbox_fit` | Zeilenbreite (px, echte Font-Metriken) vs. Limit / Max-Zeilen | ❌ error |
 | `locked_terms` | Gesperrte Kanon-Begriffe der Karte fehlen im DE-Text | ❌ error |
+| `locked_exact_tokens` | Explizit gesperrter Token fehlt oder wurde in Schreibweise/Endung verändert | ❌ error |
 | `glossary_leak` | Englischer Glossar-Name direkt im deutschen Text | ❌ error |
 | `glossary_missing` | EN-Name in Quelle, aber DE-Kanonname fehlt in Ziel | ⚠️ warning |
 | `placeholders` | **Funktionale** Platzhalter (`%s`, `%d`, `{buffer}`) weichen EN↔DE ab. Layout-Codes (`\n`, `\p`, …) werden bewusst *nicht* verglichen — Umbruch-Adaption ist legitim und wird stattdessen von `textbox_fit` geprüft | ❌ error |
@@ -98,6 +99,28 @@ konfigurierten Endpunkt. Ohne `--llm` bleibt alles lokal.
 ## Versionen
 
 - **v0.1** — alle Layer-1-Checks, Layer-2-Interface, Arbeitslast-Schätzung
+
+## Namens- und Tokenschutz
+
+`locked_terms` erkennt Namen auch nach den textuellen Layoutcodes `\n`, `\p`
+und `\l`. Mehrteilige Namen duerfen an Wortgrenzen umbrechen; Teilwoerter
+werden nicht zusammengesetzt. Originaltexte und andere Steuerzeichen bleiben
+unveraendert. Die bisherigen deutschen Beugungsendungen und der Vergleich ohne
+Gross-/Kleinschreibung gelten weiter fuer Namen.
+
+Fuer belegte unveraenderbare Tokens kann eine Karte zusaetzlich
+`"locked_exact_tokens": ["III"]` enthalten. Diese Tokens werden gross-/
+kleinschreibungsgenau und ohne Beugungsendungen als ganze Tokens geprueft:
+`III.` erfuellt `III`, `3`, `II`, `IIIs` und `iii` nicht. Es wird keine
+roemische Zahl aus jedem englischen `I` oder jedem `IV` geraten. Die Zuordnung
+muss die Datenquelle liefern. Ohne dieses optionale Feld gibt es keinen neuen
+Tokencheck. Andere bestehende Warnungen/Fehler bleiben wirksam.
+
+Beide vorhandenen Karten-JSON-Formen (`[...]` und `{"cards": [...]}`) werden
+von der CLI unterstuetzt. Pruefen: `python3 -m unittest discover -s tests -v`.
+Die neun Tests verwenden ausschliesslich erfundene Texte; keine ROM-/Pixel-/
+Szenen-/Kanonfreigabe. Diese Aenderung ist ein isolierter Draft und setzt keine
+Namensliste oder globale Umbenennung im Projekt um.
 
 ## Lizenz
 

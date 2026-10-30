@@ -121,15 +121,31 @@ def parse_glossary(path: str) -> list[dict]:
     return entries
 
 
+def layout_match_view(text: str) -> str:
+    """Known textual line/page breaks become separators in a lookup view.
+
+    Original strings and control tokens remain untouched for other checks.
+    This is not a decoder or byte-equivalence normalization.
+    """
+    return re.sub(r"\\[npl]", " ", text)
+
+
 def name_in_text(name: str, text: str) -> bool:
     """Case-insensitive word-boundary match (multi-word names supported).
     Allows German possessive/inflection suffixes (Lärchs, Loges) while
     the trailing boundary still rejects longer words (Lärchstein)."""
     if not name or not text:
         return False
-    esc = re.escape(name)
-    return re.search(rf"(?<!\w){esc}(?:s|es)?(?!\w)", text,
+    esc = re.escape(name).replace(r"\ ", r"\s+")
+    return re.search(rf"(?<!\w){esc}(?:s|es)?(?!\w)", layout_match_view(text),
                      re.IGNORECASE) is not None
+
+
+def exact_token_in_text(token: str, text: str) -> bool:
+    """Case-sensitive whole token, without the name inflection suffixes."""
+    if not token or not text:
+        return False
+    return re.search(rf"(?<!\w){re.escape(token)}(?!\w)", layout_match_view(text)) is not None
 
 
 # --------------------------------------------------------------------------
@@ -226,6 +242,12 @@ def check_card(card: dict, glossary: list[dict], corpus: dict,
         if term and not name_in_text(term, de):
             add("locked_terms", "error",
                 f"Gesperrter Begriff '{term}' fehlt im DE-Text")
+
+    # Explicit metadata only: never infer Roman numerals from every I/IV token.
+    for token in card.get("locked_exact_tokens") or []:
+        if token and not exact_token_in_text(token, de):
+            add("locked_exact_tokens", "error",
+                f"Exakt gesperrter Token '{token}' fehlt oder wurde verändert")
 
     # -- glossary: EN leak into DE + missing DE canonical name
     for g in glossary:
@@ -377,7 +399,7 @@ def main() -> int:
 
     with open(args.cards, encoding="utf-8") as fh:
         cdata = json.load(fh)
-    cards = cdata.get("cards", cdata if isinstance(cdata, list) else [])
+    cards = cdata if isinstance(cdata, list) else cdata.get("cards", [])
     print(f"→ {len(cards)} Karten geladen", file=sys.stderr)
 
     glossary = parse_glossary(args.glossary) if args.glossary else []
