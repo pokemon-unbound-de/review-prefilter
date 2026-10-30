@@ -100,9 +100,7 @@ konfigurierten Endpunkt. Ohne `--llm` bleibt alles lokal.
 
 - **v0.1** — alle Layer-1-Checks, Layer-2-Interface, Arbeitslast-Schätzung
 
-## Lizenz
-
-### Namens- und Tokenschutz
+## Namens- und Tokenschutz
 
 `locked_terms` erkennt Namen auch nach den textuellen Layoutcodes `\n`, `\p`
 und `\l`. Mehrteilige Namen duerfen an Wortgrenzen umbrechen; Teilwoerter
@@ -123,6 +121,8 @@ von der CLI unterstuetzt. Pruefen: `python3 -m unittest discover -s tests -v`.
 Die neun Tests verwenden ausschliesslich erfundene Texte; keine ROM-/Pixel-/
 Szenen-/Kanonfreigabe. Diese Aenderung ist ein isolierter Draft und setzt keine
 Namensliste oder globale Umbenennung im Projekt um.
+
+## Lizenz
 
 [MIT](LICENSE) — Copyright (c) 2026 pokemon-unbound-de
 
