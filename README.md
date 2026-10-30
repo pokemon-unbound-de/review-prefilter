@@ -26,6 +26,7 @@ Layer 3  MENSCH           → bestätigt/verbessert in der Dialogwerkstatt
 | `placeholders` | **Funktionale** Platzhalter (`%s`, `%d`, `{buffer}`) weichen EN↔DE ab. Layout-Codes (`\n`, `\p`, …) werden bewusst *nicht* verglichen — Umbruch-Adaption ist legitim und wird stattdessen von `textbox_fit` geprüft | ❌ error |
 | `consistency` | Gleiche EN-Quelle, verschiedene DE-Übersetzungen | ⚠️ warning |
 | `corpus_match` | Exakter/Naht-Treffer im Korpus → bestehende Übersetzung prüfen | ℹ️ info |
+| `corpus_ambiguity` | Korpustreffer mit mehreren DE-Rohfassungen → menschlich prüfen, kein Einzelvorschlag | ⚠️ warning |
 | `sanity` | Leere, nicht übersetzte, extreme Längenverhältnisse | ❌/⚠️ |
 
 ### Verdicts
@@ -160,3 +161,13 @@ für Cache-Schlüssel ungültig. Solche Eingaben oder nicht zugängliche
 Cachedateien brechen die CLI mit Exitcode 1 und kurzer Fehlermeldung ab.
 Vorhandene Reports älterer Läufe werden dabei nicht gelöscht; der aufrufende
 Prozess muss den Exitcode prüfen und einen frischen Ausgabeordner verwenden.
+
+## Mehrdeutige Korpustreffer
+
+Unterschiedliche deutsche Rohfassungen zum selben normalisierten EN-Schluessel
+werden als `corpus_ambiguity` markiert: Verdict mindestens `review`,
+`corpus_match: null`, kein beliebiger Einzelvorschlag. Das gilt fuer exakte
+Treffer und Fuzzy-Treffer auf einen solchen Schluessel. Eindeutige Fassungen
+und identische Duplikate behalten das bisherige Verhalten. Unterschiede sind
+keine automatisch festgestellten Fehler: Kontext und Quelle muessen geprueft
+werden. Details/Gegenprobe: [CORPUS_AMBIGUITY.md](CORPUS_AMBIGUITY.md).

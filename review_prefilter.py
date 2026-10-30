@@ -141,7 +141,11 @@ def name_in_text(name: str, text: str) -> bool:
 # --------------------------------------------------------------------------
 
 def load_corpus(path: str) -> dict:
-    """normalized en -> {de_raw, id}. Only clean entries (with DE source)."""
+    """Normalized EN -> unique suggestion or explicit ambiguity metadata.
+
+    Only clean entries with DE are considered. Different raw DE strings
+    under the same normalized EN key never produce a selected winner.
+    """
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     if isinstance(data, list):
@@ -151,6 +155,7 @@ def load_corpus(path: str) -> dict:
     else:
         raise ValueError("corpus must be a list or an object with an entries list")
     index: dict[str, dict] = {}
+    variants: dict[str, set[str]] = defaultdict(set)
     for e in entries:
         if not isinstance(e, dict):
             raise ValueError("corpus entries must be objects")
@@ -164,10 +169,23 @@ def load_corpus(path: str) -> dict:
         if has_backslash_escape(en_raw) or has_backslash_escape(de_raw):
             continue
         key = norm_text(en_raw)
+        if key:
+            variants[key].add(de_raw)
         if key and key not in index:
             index[key] = {"de_raw": de_raw, "id": e.get("id"),
                           "pointer": e.get("pointer"),
                           "status": e.get("status")}
+    for key, values in variants.items():
+        if len(values) > 1:
+            # Keep the key in the index so exact/fuzzy hits remain visible.
+            # Pin variant content for cache invalidation, without exposing
+            # private source text or choosing an order-dependent reference.
+            index[key] = {
+                "ambiguous": True,
+                "variant_count": len(values),
+                "variants_sha256": hashlib.sha256(json.dumps(
+                    sorted(values), ensure_ascii=False).encode()).hexdigest(),
+            }
     return index
 
 
@@ -277,6 +295,12 @@ def check_card(card: dict, glossary: list[dict], corpus: dict,
             cmatch = corpus_lookup(gkey, corpus, min_ratio=0.90)
         elif gkey in corpus:
             cmatch = {"match": "exact", "ratio": 1.0, **corpus[gkey]}
+        if cmatch and cmatch.get("ambiguous"):
+            add("corpus_ambiguity", "warning",
+                f"Korpus-Treffer mit {cmatch['variant_count']} verschiedenen "
+                "DE-Fassungen; keine Fassung vorgeschlagen. Kontext und "
+                "Quellen menschlich prüfen.")
+            cmatch = None
         if cmatch:
             cur = norm_text(de)
             sug = norm_text(cmatch["de_raw"])

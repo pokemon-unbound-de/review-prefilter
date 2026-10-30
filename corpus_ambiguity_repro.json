@@ -1,0 +1,33 @@
+{
+  "after": [
+    {
+      "ambiguity_flag": true,
+      "corpus_match": null,
+      "verdict": "review"
+    },
+    {
+      "ambiguity_flag": true,
+      "corpus_match": null,
+      "verdict": "review"
+    }
+  ],
+  "all_examples_synthetic": true,
+  "baseline_code_sha256": "7f166085452a58ab86041cc708dfdd469033ff9f0d68e46b053ade2049040122",
+  "baseline_ref": "3d5a388687f9b1fe3582eb5d7f715d04d9893e4c",
+  "before": [
+    {
+      "ambiguity_flag": false,
+      "suggested_de": "Hallo Freund",
+      "verdict": "pass"
+    },
+    {
+      "ambiguity_flag": false,
+      "suggested_de": "Guten Tag",
+      "verdict": "pass"
+    }
+  ],
+  "external_services_used": false,
+  "fixed_code_sha256": "421c20671993df671c1b4f7b593d6329822363560b7758a70a360f80826b68dc",
+  "schema": 1,
+  "tests": 24
+}
