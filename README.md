@@ -26,6 +26,7 @@ Layer 3  MENSCH           → bestätigt/verbessert in der Dialogwerkstatt
 | `placeholders` | **Funktionale** Platzhalter (`%s`, `%d`, `{buffer}`) weichen EN↔DE ab. Layout-Codes (`\n`, `\p`, …) werden bewusst *nicht* verglichen — Umbruch-Adaption ist legitim und wird stattdessen von `textbox_fit` geprüft | ❌ error |
 | `consistency` | Gleiche EN-Quelle, verschiedene DE-Übersetzungen | ⚠️ warning |
 | `corpus_match` | Exakter/Naht-Treffer im Korpus → bestehende Übersetzung prüfen | ℹ️ info |
+| `corpus_ambiguity` | Korpustreffer mit mehreren DE-Rohfassungen → menschlich prüfen, kein Einzelvorschlag | ⚠️ warning |
 | `sanity` | Leere, nicht übersetzte, extreme Längenverhältnisse | ❌/⚠️ |
 
 ### Verdicts
@@ -57,6 +58,22 @@ python3 review_prefilter.py \
 | `--no-fuzzy` | Fuzzy-Matching abschalten (schneller) |
 | `--llm` | Layer 2: LLM-Review der geflagten Karten |
 | `--llm-scope` | `flagged` (Default) oder `all` |
+
+### Korpuseingaben
+
+`--corpus` akzeptiert eine JSON-Liste von Eintraegen oder ein Objekt mit
+`"entries": [...]`. Eintraege sind Objekte mit `en_raw`/`de_raw` als Text
+oder `null`; leere oder fehlende Texte werden wie bisher herausgefiltert.
+Eine ausdruecklich leere Liste ist gueltig. Ohne `--corpus` bleibt der
+Korpusabgleich ausgeschaltet.
+
+Wird eine Datei ausdruecklich angegeben, muss sie lesbar sein und das Format
+erfuellen. Fehlende Dateien, ungueltiges JSON/UTF-8, falsche Strukturen oder
+nicht-textuelle Textfelder brechen mit Exit1 ab, bevor Cache/Pruefung und
+neue Reports entstehen. Ein fehlender Korpus wird nicht mehr stillschweigend
+als leerer behandelt. Details und Vorher/Nachher: [CORPUS_INPUT.md](CORPUS_INPUT.md).
+Alte Reports werden im Fehlerfall nicht entfernt; Exitcode pruefen und fuer
+jeden Lauf einen frischen Ausgabeordner verwenden.
 
 ### Layer 2 (LLM)
 
@@ -90,8 +107,9 @@ konfigurierten Endpunkt. Ohne `--llm` bleibt alles lokal.
 
 ## Batch-Fähigkeit (v0.2+)
 
-- Cache-Plan: `source_sha256` als Cache-Key → neue Karten (z. B. der
-  Rest des Korpus) laufen inkrementell durch, bereits geprüfte nicht erneut
+- Implementiert: optionaler `--cache` fuer deterministische Layer-1-Ergebnisse.
+  Der Schluessel beruecksichtigt die gesamte Karte und alle Pruefabhaengigkeiten;
+  `source_sha256` allein genuegt nicht (Details unten).
 - Web-App-Integration: `prefilter_results.json` als Input für die
   Dialogwerkstatt (Karten nach Risiko sortieren, AI-Vorschläge anzeigen)
 
@@ -108,3 +126,48 @@ konfigurierten Endpunkt. Ohne `--llm` bleibt alles lokal.
 *Teil des Pokémon Unbound DE Projekts. Unoffizielles Fan-Projekt, nicht
 mit den Rechteinhabern verbunden. Keine ROMs, Inhalte oder privaten
 Daten in diesem Repository.*
+
+## Inkrementelle Layer-1-Prüfung
+
+Mit `--cache /privater/pfad/review.sqlite3` können deterministische
+Kartenergebnisse lokal wiederverwendet werden. Ohne diese Option bleibt der
+Cache aus. Der Schlüssel berücksichtigt **die gesamte Karte** (auch DE,
+Kontext und Layout-Metadaten), Glossar, Korpus, Konsistenzgruppen, Fuzzy-Option
+und den Inhalt beider Python-Prüfdateien. `source_sha256` allein reicht nicht.
+Änderungen an gemeinsamen Daten invalidieren konservativ alle Einträge.
+
+Der Cache enthält Karteninhalte und Prüfbefunde: ausschließlich lokal/privat
+aufbewahren. SQLite-Dateien sind git-ignoriert. Das bestehende Reportformat
+bleibt erhalten; `summary.layer1_cache` nennt Treffer und neue Prüfungen.
+Beschaedigte Eintragspayloads werden neu berechnet. Auch nicht-textuelle
+`payload`-/`digest`-Felder (z.B. SQLite-BLOBs) sind Cache-Misses statt Python-
+Abstuerzen; nur der betroffene Eintrag wird neu geschrieben. Bei gleicher
+Pruefversion bleiben andere gueltige Eintraege Treffer. Ein beschaedigter oder
+nicht zugaenglicher Datenbankcontainer fuehrt weiter zum Fehler statt zu einem
+Erfolg. Vorher/Nachher und Grenzen: [CACHE_RECOVERY.md](CACHE_RECOVERY.md).
+
+Der Cache speichert **keine LLM-Antworten**. `--llm` behält sein bisheriges
+Verhalten und verursacht bei jedem aktivierten Lauf erneut externe Aufrufe.
+Der Cache ersetzt weder menschliches Review noch ROM-/Emulatorprüfungen.
+
+Prüfen: `python3 -m unittest discover -s tests -v`.
+
+Betriebshinweise: Der Cache hat noch keine automatische Größenbegrenzung oder
+Bereinigung. Alte Einträge bleiben erhalten, bis die lokale Datei bei
+angehaltener Verarbeitung entfernt wird; der nächste Lauf prüft dann neu.
+Veränderte Queue-Zusammensetzung kann Konsistenzgruppen ändern und dadurch
+alle Cacheeinträge invalidieren. Nichtendliche Zahlen (NaN/Infinity) sind
+für Cache-Schlüssel ungültig. Solche Eingaben oder nicht zugängliche
+Cachedateien brechen die CLI mit Exitcode 1 und kurzer Fehlermeldung ab.
+Vorhandene Reports älterer Läufe werden dabei nicht gelöscht; der aufrufende
+Prozess muss den Exitcode prüfen und einen frischen Ausgabeordner verwenden.
+
+## Mehrdeutige Korpustreffer
+
+Unterschiedliche deutsche Rohfassungen zum selben normalisierten EN-Schluessel
+werden als `corpus_ambiguity` markiert: Verdict mindestens `review`,
+`corpus_match: null`, kein beliebiger Einzelvorschlag. Das gilt fuer exakte
+Treffer und Fuzzy-Treffer auf einen solchen Schluessel. Eindeutige Fassungen
+und identische Duplikate behalten das bisherige Verhalten. Unterschiede sind
+keine automatisch festgestellten Fehler: Kontext und Quelle muessen geprueft
+werden. Details/Gegenprobe: [CORPUS_AMBIGUITY.md](CORPUS_AMBIGUITY.md).

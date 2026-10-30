@@ -1,0 +1,51 @@
+{
+  "all_data_synthetic": true,
+  "baseline": {
+    "bare_list": {
+      "exit": 1,
+      "report_created": false,
+      "traceback": true
+    },
+    "missing": {
+      "exit": 0,
+      "report_created": true,
+      "traceback": false
+    }
+  },
+  "baseline_code_sha256": "411f3b1babd91ed98eaa066c90565e66b1f66f4c0742391d30379c8d57c0813f",
+  "baseline_ref": "5ecbdfd6ddf802f291b612b6a2047e6a3b4d43bd",
+  "equivalent_packaging_results_equal": true,
+  "external_services_used": false,
+  "fixed": {
+    "bare_list": {
+      "cache": {
+        "enabled": true,
+        "hits": 0,
+        "misses": 1
+      },
+      "exact_match_observed": true,
+      "exit": 0,
+      "report_created": true,
+      "traceback": false
+    },
+    "missing": {
+      "exit": 1,
+      "report_created": false,
+      "traceback": false
+    },
+    "wrapped": {
+      "cache": {
+        "enabled": true,
+        "hits": 1,
+        "misses": 0
+      },
+      "exact_match_observed": true,
+      "exit": 0,
+      "report_created": true,
+      "traceback": false
+    }
+  },
+  "fixed_code_sha256": "7f166085452a58ab86041cc708dfdd469033ff9f0d68e46b053ade2049040122",
+  "schema": 1,
+  "tests": 18
+}

@@ -40,11 +40,15 @@ uploaded anywhere (Layer 1). Layer 2 is explicit opt-in.
 from __future__ import annotations
 
 import argparse
+import hashlib
+from pathlib import Path
+from incremental_cache import review_cards
 import difflib
 import json
 import os
 import re
 import statistics
+import sqlite3
 import sys
 import urllib.error
 import urllib.request
@@ -137,14 +141,27 @@ def name_in_text(name: str, text: str) -> bool:
 # --------------------------------------------------------------------------
 
 def load_corpus(path: str) -> dict:
-    """normalized en -> {de_raw, id}. Only clean entries (with DE source)."""
-    if not os.path.exists(path):
-        return {}
+    """Normalized EN -> unique suggestion or explicit ambiguity metadata.
+
+    Only clean entries with DE are considered. Different raw DE strings
+    under the same normalized EN key never produce a selected winner.
+    """
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
-    entries = data.get("entries", data if isinstance(data, list) else [])
+    if isinstance(data, list):
+        entries = data
+    elif isinstance(data, dict) and isinstance(data.get("entries"), list):
+        entries = data["entries"]
+    else:
+        raise ValueError("corpus must be a list or an object with an entries list")
     index: dict[str, dict] = {}
+    variants: dict[str, set[str]] = defaultdict(set)
     for e in entries:
+        if not isinstance(e, dict):
+            raise ValueError("corpus entries must be objects")
+        if any(e.get(field) is not None and not isinstance(e[field], str)
+               for field in ("en_raw", "de_raw")):
+            raise ValueError("corpus text fields must be strings or null")
         en_raw = e.get("en_raw") or ""
         de_raw = e.get("de_raw") or ""
         if not en_raw or not de_raw:
@@ -152,10 +169,23 @@ def load_corpus(path: str) -> dict:
         if has_backslash_escape(en_raw) or has_backslash_escape(de_raw):
             continue
         key = norm_text(en_raw)
+        if key:
+            variants[key].add(de_raw)
         if key and key not in index:
             index[key] = {"de_raw": de_raw, "id": e.get("id"),
                           "pointer": e.get("pointer"),
                           "status": e.get("status")}
+    for key, values in variants.items():
+        if len(values) > 1:
+            # Keep the key in the index so exact/fuzzy hits remain visible.
+            # Pin variant content for cache invalidation, without exposing
+            # private source text or choosing an order-dependent reference.
+            index[key] = {
+                "ambiguous": True,
+                "variant_count": len(values),
+                "variants_sha256": hashlib.sha256(json.dumps(
+                    sorted(values), ensure_ascii=False).encode()).hexdigest(),
+            }
     return index
 
 
@@ -265,6 +295,12 @@ def check_card(card: dict, glossary: list[dict], corpus: dict,
             cmatch = corpus_lookup(gkey, corpus, min_ratio=0.90)
         elif gkey in corpus:
             cmatch = {"match": "exact", "ratio": 1.0, **corpus[gkey]}
+        if cmatch and cmatch.get("ambiguous"):
+            add("corpus_ambiguity", "warning",
+                f"Korpus-Treffer mit {cmatch['variant_count']} verschiedenen "
+                "DE-Fassungen; keine Fassung vorgeschlagen. Kontext und "
+                "Quellen menschlich prüfen.")
+            cmatch = None
         if cmatch:
             cur = norm_text(de)
             sug = norm_text(cmatch["de_raw"])
@@ -371,19 +407,25 @@ def main() -> int:
                    help="run Layer 2 LLM review on flagged cards")
     p.add_argument("--llm-scope", choices=["flagged", "all"],
                    default="flagged")
+    p.add_argument("--cache", default=None, help="optional private SQLite cache for Layer 1")
     args = p.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
 
     with open(args.cards, encoding="utf-8") as fh:
         cdata = json.load(fh)
-    cards = cdata.get("cards", cdata if isinstance(cdata, list) else [])
+    cards = cdata if isinstance(cdata, list) else cdata.get("cards", [])
     print(f"→ {len(cards)} Karten geladen", file=sys.stderr)
 
     glossary = parse_glossary(args.glossary) if args.glossary else []
     print(f"→ {len(glossary)} Glossar-Einträge", file=sys.stderr)
 
-    corpus = load_corpus(args.corpus) if args.corpus else {}
+    try:
+        corpus = load_corpus(args.corpus) if args.corpus else {}
+    except (ValueError, OSError):
+        print("Korpus konnte nicht geladen werden: Datei, JSON-Struktur und "
+              "Textfelder prüfen; kein Ergebnis erzeugt.", file=sys.stderr)
+        return 1
     print(f"→ {len(corpus)} saubere Korpus-Paare", file=sys.stderr)
 
     # consistency groups: normalized en -> distinct normalized de
@@ -395,8 +437,20 @@ def main() -> int:
         k: sorted(v) for k, v in groups.items() if len(v) > 1}
 
     print("→ Layer 1: deterministische Checks …", file=sys.stderr)
-    results = [check_card(c, glossary, corpus, consistency_groups,
-                          run_fuzzy=not args.no_fuzzy) for c in cards]
+    rules_version = hashlib.sha256(
+        Path(__file__).read_bytes() + Path(__file__).with_name("incremental_cache.py").read_bytes()).hexdigest()
+    try:
+        results, cache_stats = review_cards(
+            cards, glossary, corpus, consistency_groups, not args.no_fuzzy,
+            check_card, cache_path=args.cache, rules_version=rules_version)
+    except (ValueError, sqlite3.Error, OSError) as error:
+        print(f"Layer-1-Prüfung abgebrochen ({type(error).__name__}): "
+              "Eingabedaten und Cache-Zugriff prüfen; kein Ergebnis erzeugt.",
+              file=sys.stderr)
+        return 1
+    if args.cache:
+        print(f"→ Layer-1-Cache: {cache_stats['hits']} Treffer, "
+              f"{cache_stats['misses']} neu geprüft", file=sys.stderr)
 
     # -- Layer 2
     if args.llm:
@@ -438,6 +492,7 @@ def main() -> int:
         "generated_at": __import__("datetime").datetime.now().isoformat(),
         "summary": {
             "cards": len(cards),
+            "layer1_cache": cache_stats,
             "verdicts": dict(verdicts),
             "flags_by_check": dict(check_counts),
             "workload_hours_before": round(before_h, 1),
