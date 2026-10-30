@@ -58,6 +58,22 @@ python3 review_prefilter.py \
 | `--llm` | Layer 2: LLM-Review der geflagten Karten |
 | `--llm-scope` | `flagged` (Default) oder `all` |
 
+### Korpuseingaben
+
+`--corpus` akzeptiert eine JSON-Liste von Eintraegen oder ein Objekt mit
+`"entries": [...]`. Eintraege sind Objekte mit `en_raw`/`de_raw` als Text
+oder `null`; leere oder fehlende Texte werden wie bisher herausgefiltert.
+Eine ausdruecklich leere Liste ist gueltig. Ohne `--corpus` bleibt der
+Korpusabgleich ausgeschaltet.
+
+Wird eine Datei ausdruecklich angegeben, muss sie lesbar sein und das Format
+erfuellen. Fehlende Dateien, ungueltiges JSON/UTF-8, falsche Strukturen oder
+nicht-textuelle Textfelder brechen mit Exit1 ab, bevor Cache/Pruefung und
+neue Reports entstehen. Ein fehlender Korpus wird nicht mehr stillschweigend
+als leerer behandelt. Details und Vorher/Nachher: [CORPUS_INPUT.md](CORPUS_INPUT.md).
+Alte Reports werden im Fehlerfall nicht entfernt; Exitcode pruefen und fuer
+jeden Lauf einen frischen Ausgabeordner verwenden.
+
 ### Layer 2 (LLM)
 
 OpenAI-kompatible Endpunkte via Umgebungsvariablen:

@@ -142,13 +142,21 @@ def name_in_text(name: str, text: str) -> bool:
 
 def load_corpus(path: str) -> dict:
     """normalized en -> {de_raw, id}. Only clean entries (with DE source)."""
-    if not os.path.exists(path):
-        return {}
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
-    entries = data.get("entries", data if isinstance(data, list) else [])
+    if isinstance(data, list):
+        entries = data
+    elif isinstance(data, dict) and isinstance(data.get("entries"), list):
+        entries = data["entries"]
+    else:
+        raise ValueError("corpus must be a list or an object with an entries list")
     index: dict[str, dict] = {}
     for e in entries:
+        if not isinstance(e, dict):
+            raise ValueError("corpus entries must be objects")
+        if any(e.get(field) is not None and not isinstance(e[field], str)
+               for field in ("en_raw", "de_raw")):
+            raise ValueError("corpus text fields must be strings or null")
         en_raw = e.get("en_raw") or ""
         de_raw = e.get("de_raw") or ""
         if not en_raw or not de_raw:
@@ -388,7 +396,12 @@ def main() -> int:
     glossary = parse_glossary(args.glossary) if args.glossary else []
     print(f"→ {len(glossary)} Glossar-Einträge", file=sys.stderr)
 
-    corpus = load_corpus(args.corpus) if args.corpus else {}
+    try:
+        corpus = load_corpus(args.corpus) if args.corpus else {}
+    except (ValueError, OSError):
+        print("Korpus konnte nicht geladen werden: Datei, JSON-Struktur und "
+              "Textfelder prüfen; kein Ergebnis erzeugt.", file=sys.stderr)
+        return 1
     print(f"→ {len(corpus)} saubere Korpus-Paare", file=sys.stderr)
 
     # consistency groups: normalized en -> distinct normalized de
