@@ -1,5 +1,7 @@
 # 🔍 Review Pre-Filter
 
+> **English:** Two-layer review pre-filter for localization queues: deterministic checks (terminology, textbox fit, fuzzy matching, placeholders) plus an optional, pluggable LLM language review. AI orchestrates, humans decide.
+
 **Zwei-Schicht-Pre-Filter für Übersetzungs-Review-Queues.**
 
 Bevor ein Mensch eine Karte prüft, prüft der Pre-Filter sie automatisch:
